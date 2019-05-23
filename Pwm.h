@@ -1,4 +1,6 @@
-#include <iostream>
+#ifndef PWM_H
+#define PWM_H
+
 #include <fstream>
 
 using namespace std;
@@ -15,6 +17,7 @@ class Pwm {
 	void disable();
 	void set_period(int ns);
 	void set_duty_cycle(int percent);
+	void set_12dc_percent(float percent);
 	bool ok();
 	
 	private:
@@ -22,3 +25,5 @@ class Pwm {
 	string dev;
 	fstream fenable, fduty_cycle, fperiod;
 };
+
+#endif /* PWM_H */

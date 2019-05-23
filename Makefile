@@ -1,7 +1,7 @@
 CFLAGS=-Wall -O1
-LIBS=
+LIBS=-lpthread
 CC=g++
-OBJS=main.o Pwm.o
+OBJS=main.o Pwm.o BNO055_Imu.o
 OUT=main.out
 
 all: main.out
@@ -13,7 +13,7 @@ clean:
 	rm -rf $(OUT) $(OBJS)
 
 %.o: %.cpp
-	$(CC) -c -o $@ $< $(CFLAGS) $(LIBS)
+	$(CC) -c -o $@ $< $(CFLAGS)
 	
 %.o: %.c
-	$(CC) -c -o $@ $< $(CFLAGS) $(LIBS)
+	$(CC) -c -o $@ $< $(CFLAGS)
