@@ -7,17 +7,7 @@
 
 using namespace std;
 
-typedef struct {
-	string name;
-	string pwm_dev;
-} PwmInstance;
-
-PwmInstance Pwms[4] = {
-	[0] = {.name = "One", .pwm_dev = "pwm-1:0"},
-	[1] = {.name = "Two", .pwm_dev = "pwm-1:1"},
-	[2] = {.name = "Three", .pwm_dev = "pwm-4:0"},
-	[3] = {.name = "Four", .pwm_dev = "pwm-4:1"},
-};
+extern PwmInstance Pwms[];
 
 void *threaded_function(void *n) {
 	PwmInstance *pwm = (PwmInstance *)n;
@@ -50,6 +40,8 @@ int main(int c, char *argv[]) {
 	int running = 50;
 	BNO055_Imu Imu;
 	HRP_T hrp;
+	
+	//Pwm px = Pwm(Pwms[0].name, Pwms[0].pwm_dev);
 	
 	Imu.start();
 	while (running--) {

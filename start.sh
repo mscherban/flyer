@@ -53,4 +53,3 @@ else
 fi
 
 ./main.out
-./killpwms.out

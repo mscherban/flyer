@@ -21,8 +21,10 @@ BNO055_Imu::BNO055_Imu() {
 	}
 	
 	ioctl(this->fd, I2C_SLAVE, BNO055_ADR);
-	write(this->fd, &buff, 1);
-	read(this->fd, &buff, 1);
+	if (write(this->fd, &buff, 1) < 0)
+		cout << "Error: " << __FUNCTION__ << ":" << __LINE__ << endl;
+	if (read(this->fd, &buff, 1) < 0)
+		cout << "Error: " << __FUNCTION__ << ":" << __LINE__ << endl;
 	
 	if (buff == BNO055_CHIP_ID) {
 		cout << "Connected to BNO055." << endl;
@@ -42,12 +44,14 @@ void BNO055_Imu::config() {
 /* setting the IMU to IMU mode starts the data output */
 void BNO055_Imu::start() {
 	char data[2] = { BNO055_OPR_MODE, OPR_MODE_IMU };
-	write(this->fd, data, 2);
+	if (write(this->fd, data, 2))
+		cout << "Error: " << __FUNCTION__ << ":" << __LINE__ << endl;
 }
 
 void BNO055_Imu::stop() {
 	char data[2] = { BNO055_OPR_MODE, OPR_MODE_CONFIG };
-	write(this->fd, data, 2);
+	if (write(this->fd, data, 2) < 0)
+		cout << "Error: " << __FUNCTION__ << ":" << __LINE__ << endl;
 }
 
 HRP_T BNO055_Imu::get_hrp() {
@@ -55,9 +59,11 @@ HRP_T BNO055_Imu::get_hrp() {
 	HRP_T hrp;
 	
 	/* set read adr to heading */
-	write(this->fd, &adr, 1);
+	if (write(this->fd, &adr, 1) < 0)
+		cout << "Error: " << __FUNCTION__ << ":" << __LINE__ << endl;
 	/* read out 6 bytes, alignment matches HRP_T structure */
-	read(this->fd, &hrp, 6);
+	if (read(this->fd, &hrp, 6) < 0)
+		cout << "Error: " << __FUNCTION__ << ":" << __LINE__ << endl;
 	
 	/* convert to float */
 	hrp.fh = (float)hrp.h / 16;

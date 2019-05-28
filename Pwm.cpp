@@ -1,6 +1,12 @@
 #include <iostream>
 #include "Pwm.h"
 
+PwmInstance Pwms[4] = {
+	[0] = {.name = "One", .pwm_dev = "pwm-1:0"},
+	[1] = {.name = "Two", .pwm_dev = "pwm-1:1"},
+	[2] = {.name = "Three", .pwm_dev = "pwm-4:0"},
+	[3] = {.name = "Four", .pwm_dev = "pwm-4:1"},
+};
 
 Pwm::Pwm(string Name, string Pwm_Dev) {
 	string o = "PWM " + Name + "(";

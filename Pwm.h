@@ -7,6 +7,11 @@ using namespace std;
 
 #define PWM_PATH	"/sys/class/pwm/"
 
+typedef struct {
+	string name;
+	string pwm_dev;
+} PwmInstance;
+
 class Pwm {
 	public:
 	string name;

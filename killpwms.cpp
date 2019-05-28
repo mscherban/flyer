@@ -6,17 +6,7 @@
 
 using namespace std;
 
-typedef struct {
-	string name;
-	string pwm_dev;
-} PwmInstance;
-
-PwmInstance Pwms[4] = {
-	[0] = {.name = "One", .pwm_dev = "pwm-1:0"},
-	[1] = {.name = "Two", .pwm_dev = "pwm-1:1"},
-	[2] = {.name = "Three", .pwm_dev = "pwm-4:0"},
-	[3] = {.name = "Four", .pwm_dev = "pwm-4:1"},
-};
+extern PwmInstance Pwms[];
 
 
 int main(int c, char *argv[]) {
