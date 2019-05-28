@@ -40,13 +40,18 @@ int main(int c, char *argv[]) {
 	int running = 50;
 	BNO055_Imu Imu;
 	HRP_T hrp;
+	float hf, hr, hp;
 	
 	//Pwm px = Pwm(Pwms[0].name, Pwms[0].pwm_dev);
 	
 	Imu.start();
 	while (running--) {
 		hrp = Imu.get_hrp();
-		printf("heading: %f, roll: %f, pitch: %f\n", hrp.fh, hrp.fr, hrp.fp);
+		hf = (float)hrp.h / 16;
+		hr = (float)hrp.r / 16;
+		hp = (float)hrp.p / 16;
+		
+		printf("heading: %f, roll: %f, pitch: %f\n", hf, hr, hp);
 		sleep(1);
 	}
 	Imu.stop();

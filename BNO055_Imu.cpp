@@ -65,10 +65,5 @@ HRP_T BNO055_Imu::get_hrp() {
 	if (read(this->fd, &hrp, 6) < 0)
 		cout << "Error: " << __FUNCTION__ << ":" << __LINE__ << endl;
 	
-	/* convert to float */
-	hrp.fh = (float)hrp.h / 16;
-	hrp.fr = (float)hrp.r / 16;
-	hrp.fp = (float)hrp.p / 16;
-	
 	return hrp;
 }

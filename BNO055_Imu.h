@@ -28,9 +28,15 @@
 #define ROLL_ADR	0x1C
 #define PITCH_ADR	0x1E
 
+/*
+	The device returns and integer of the data multipled by 16.
+	(aka the least significant nibble is the value to the right of the decimal)
+	To get the correct value divide it by 16:
+		heading_float = (float)h / 16;
+*/
+
 typedef struct {
 	short h, r, p;
-	float fh, fr, fp;
 } HRP_T;
 
 class BNO055_Imu {
