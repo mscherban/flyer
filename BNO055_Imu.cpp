@@ -44,7 +44,7 @@ void BNO055_Imu::config() {
 /* setting the IMU to IMU mode starts the data output */
 void BNO055_Imu::start() {
 	char data[2] = { BNO055_OPR_MODE, OPR_MODE_IMU };
-	if (write(this->fd, data, 2))
+	if (write(this->fd, data, 2) < 0)
 		cout << "Error: " << __FUNCTION__ << ":" << __LINE__ << endl;
 }
 

@@ -52,4 +52,4 @@ else
 	config-pin P9.20 i2c #
 fi
 
-./main.out
+#./main.out

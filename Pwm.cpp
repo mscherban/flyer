@@ -12,7 +12,7 @@ Pwm::Pwm(string Name, string Pwm_Dev) {
 	string o = "PWM " + Name + "(";
 	o += Pwm_Dev + ") Initializing";
 	cout << o << endl;
-	
+
 	this->name = Name;
 	this->dev = PWM_PATH + Pwm_Dev;
 	
@@ -33,6 +33,7 @@ Pwm::Pwm(string Name, string Pwm_Dev) {
 }
 
 Pwm::~Pwm() {
+	this->disable();
 	this->fenable.close();
 	this->fduty_cycle.close();
 	this->fperiod.close();
