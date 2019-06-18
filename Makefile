@@ -12,7 +12,7 @@ main.out: $(OBJS)
 kp: killpwms.o Pwm.o
 	$(CC) -o $@ $^ $(CFLAGS) $(LIBS)
 
-cal: cal.o Pwm.o
+cal: cal.o Pwm.o BNO055_Imu.o
 	$(CC) -o $@ $^ $(CFLAGS) $(LIBS)
 
 clean: 
