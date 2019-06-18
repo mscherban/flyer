@@ -1,4 +1,5 @@
 #include <iostream>
+#include <vector>
 #include <unistd.h>
 #include <pthread.h>
 
@@ -10,6 +11,7 @@ using namespace std;
 extern PwmInstance Pwms[];
 
 bool running = 1;
+int engines = 4;
 
 void *monitor_imu(void *n) {
 	BNO055_Imu Imu;
@@ -18,6 +20,7 @@ void *monitor_imu(void *n) {
 	float ifr, ifp;
 
 	Imu.start();
+	usleep(1000000 / 2);
 
 	hrp = Imu.get_hrp();
 	ifr = (float)hrp.r / 16;
@@ -49,7 +52,6 @@ int main(int c, char *argv[]) {
 	Pwm p1(Pwms[1].name, Pwms[1].pwm_dev);
 	Pwm p2(Pwms[2].name, Pwms[2].pwm_dev);
 	Pwm p3(Pwms[3].name, Pwms[3].pwm_dev);
-	
 
 	p0.set_period(2100000);
 	p1.set_period(2100000);
@@ -60,8 +62,6 @@ int main(int c, char *argv[]) {
 	p1.set_12dc_percent(0);
 	p2.set_12dc_percent(0);
 	p3.set_12dc_percent(0);
-
-	
 
 	p0.enable();
 	p1.enable();
@@ -84,23 +84,58 @@ int main(int c, char *argv[]) {
 				if ((percent -= 3) < 0) {
 					percent = 0;
 				}
-			} else {
+			}
+			else if (!in.compare("a")) {
+				cout << "all engines" << endl;
+				engines = 4;
+				continue;
+			}
+			else if (!in.compare("f")) {
+				cout << "front engine only" << endl;
+				engines = 0;
+				continue;
+			}
+			else if (!in.compare("r")) {
+				cout << "right engine only" << endl;
+				engines = 1;
+				continue;
+			}
+			else if (!in.compare("b")) {
+				cout << "back engine only" << endl;
+				engines = 2;
+				continue;
+			}
+			else if (!in.compare("l")) {
+				cout << "left engine only" << endl;
+				engines = 3;
+				continue;
+			}
+			else {
 				cout << "Stopping..." << endl;
 				break;
 			}
-
-
 		}
 
 		if (percent >= 0 && percent <= 100) {
 			cout << "Setting PWM Percent to: " << percent << "%" << endl;
-			p0.set_12dc_percent((float)percent);
-			p1.set_12dc_percent((float)percent);
-			p2.set_12dc_percent((float)percent);
-			p3.set_12dc_percent((float)percent);
-		}
-		else {
-			//break;
+			if (engines == 4) {
+				p0.set_12dc_percent((float)percent);
+				p1.set_12dc_percent((float)percent);
+				p2.set_12dc_percent((float)percent);
+				p3.set_12dc_percent((float)percent);
+			}
+			else if (engines == 0) {
+				p0.set_12dc_percent((float)percent);
+			}
+			else if (engines == 1) {
+				p1.set_12dc_percent((float)percent);
+			}
+			else if (engines == 2) {
+				p2.set_12dc_percent((float)percent);
+			}
+			else if (engines == 3) {
+				p3.set_12dc_percent((float)percent);
+			}
 		}
 	} while(1);
 

@@ -18,6 +18,8 @@
 #define OPR_MODE_IMU		0x08
 #define OPR_MODE_CONFIG		0x00
 
+#define IMU_POLLING_RATE_HZ	100 //10ms
+
 /* 
 	All axis are 2 bytes starting at:
 	Heading - 0x1A

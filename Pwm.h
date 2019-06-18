@@ -7,6 +7,14 @@ using namespace std;
 
 #define PWM_PATH	"/sys/class/pwm/"
 
+/* Motor locations relative to the IMU */
+enum Motor_Locs {
+	FRONT = 0,
+	RIGHT = 1,
+	BACK = 2,
+	LEFT = 3,
+};
+
 typedef struct {
 	string name;
 	string pwm_dev;
