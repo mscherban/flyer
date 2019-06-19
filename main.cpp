@@ -30,10 +30,23 @@ float Orientations[3];
 
 float MotorSpeed[4] = { 0 };
 
+struct MotorPidDebug {
+	float pterm, iterm, dterm;
+	float pid;
+	float error;
+	float motorspeed;
+};
+
+struct {
+	float setspeed;
+	struct MotorPidDebug Motor[4];
+} DebugInfo;
+
 /*
 iterm: the iterm of the motor
 positive: if this motor error (too low) is positive or not
 which_orientation : 1 for pitch, 2 for roll
+perror: previous error
 */
 #define ORIENTATION_PITCH	1
 #define ORIENTATION_ROLL	2
@@ -71,12 +84,14 @@ struct MotorPidInfo MotorPidInfos[4] {
 	}
 };
 
-#define KP	.5
-#define KI	.5
-#define KD 	.5
+#define MAX_SPEED_PID_BOOST	5
+#define KP	0.5
+#define KI	0.0
+#define KD 	0.3
 
 float Pid(int m) {
 	float error;
+	float pterm, iterm, dterm, pid;
 	
 	//get the pitch or roll error
 	error = Orientations[MotorPidInfos[m].which_orientation];
@@ -87,13 +102,40 @@ float Pid(int m) {
 		error = -error;
 
 	//if our error is negative here, we are high and don't need to correct
-	if (error <= 0.0) {
-		return 0;
-	}
+	//if (error <= 0.0) {
+	//	return 0;
+	//}
 
-	//cout << "Motor #" << m << " is error!" << endl;
+	//pterm is error, later multiplied by coefficient
+	pterm = error;
 
-	return error;
+	//iterm is the integration of previous errors
+	iterm = MotorPidInfos[m].iterm + (error * (1.0f/IMU_POLLING_RATE_HZ));
+
+	//dterm is how quickly it changed from previous error
+	dterm = error - MotorPidInfos[m].perror;
+
+	//sum and multiply by coefficients for the control value
+	pid = (pterm * KP) + (iterm * KI) - (dterm * KD);
+
+ 	DebugInfo.Motor[m].pterm = pterm;
+	DebugInfo.Motor[m].iterm = iterm;
+	DebugInfo.Motor[m].dterm = dterm;
+	DebugInfo.Motor[m].pid = pid;
+	DebugInfo.Motor[m].error = error; 
+
+	//update for next go
+	MotorPidInfos[m].perror = error;
+	MotorPidInfos[m].iterm = iterm;
+
+	//if (error <= 0.0) {
+	//	pid = 0;
+	//}
+
+	//restrict the pid to a maximum of 10% above setspeed
+	pid = (float)min(MAX_SPEED_PID_BOOST, (int)pid);
+
+	return pid;
 }
 
 /*
@@ -116,19 +158,11 @@ void *stabilize(void *n) {
 	do {
 		sem_wait(&hrp_sem);
 
-		Pid(0);
-		Pid(1);
-		Pid(2);
-		Pid(3);
+		MotorSpeed[FRONT] = percent_g + Pid(FRONT);
+		MotorSpeed[BACK] = percent_g + Pid(BACK);
 
-		MotorSpeed[FRONT] = percent_g;
-		MotorSpeed[BACK] = percent_g;
-
-
-
-
-		MotorSpeed[RIGHT] = percent_g;
-		MotorSpeed[LEFT] = percent_g;
+		MotorSpeed[RIGHT] = percent_g + Pid(RIGHT);
+		MotorSpeed[LEFT] = percent_g + Pid(LEFT);
 
 		sem_post(&motor_sem);
 	} while (running_g);
@@ -160,10 +194,19 @@ void *drive_motors(void *n) {
 
 	do {
 		//cout << "Setting PWM Percent to: " << percent_g << "%" << endl;
+		//printf("FRONT: %f, RIGHT: %f, BACK: %f, LEFT: %f\n",
+		//		MotorSpeed[FRONT], MotorSpeed[RIGHT], MotorSpeed[BACK], MotorSpeed[LEFT]);
 		p0.set_12dc_percent(MotorSpeed[FRONT]);
 		p1.set_12dc_percent(MotorSpeed[RIGHT]);
 		p2.set_12dc_percent(MotorSpeed[BACK]);
 		p3.set_12dc_percent(MotorSpeed[LEFT]);
+
+		DebugInfo.Motor[FRONT].motorspeed = MotorSpeed[FRONT];
+		DebugInfo.Motor[RIGHT].motorspeed = MotorSpeed[RIGHT];
+		DebugInfo.Motor[BACK].motorspeed = MotorSpeed[BACK];
+		DebugInfo.Motor[LEFT].motorspeed = MotorSpeed[LEFT];
+		DebugInfo.setspeed = percent_g;
+
 		sem_wait(&motor_sem); //update with further new data
 	} while(running_g);
 
@@ -246,6 +289,8 @@ void *monitor_input(void *n) {
 		}
 
 	} while(running_g);
+
+	sem_post(&motor_sem); //post to motor to get it to shut off
 
 	return 0;
 }
