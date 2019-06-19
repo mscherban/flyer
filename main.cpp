@@ -33,7 +33,7 @@ float MotorSpeed[4] = { 0 };
 /*
 iterm: the iterm of the motor
 positive: if this motor error (too low) is positive or not
-which_orientation : 0 for pitch, 1 for roll
+which_orientation : 1 for pitch, 2 for roll
 */
 #define ORIENTATION_PITCH	1
 #define ORIENTATION_ROLL	2
@@ -99,12 +99,12 @@ float Pid(int m) {
 /*
 	--- STABILITY ---
 Pitch:
-	Pitch is the angle that the front and back motors make.
+	Pitch is the angle that the front and back motors make with the earth
 	When pitch is:
 		Positive: Front is low, back is high
 		Negative: Front is high, back is low
 
-	Roll is the angle that the left and right motors make.
+	Roll is the angle that the left and right motors make with the earth
 	When roll is:
 		Positive: Left is low, right is high
 		Negative: Left is high, right is low
@@ -147,6 +147,7 @@ void *drive_motors(void *n) {
 	p2.set_period(MOTOR_PWM_FREQ);
 	p3.set_period(MOTOR_PWM_FREQ);
 
+	//set the initial speed to 0
 	p0.set_12dc_percent(0);
 	p1.set_12dc_percent(0);
 	p2.set_12dc_percent(0);
@@ -163,7 +164,7 @@ void *drive_motors(void *n) {
 		p1.set_12dc_percent(MotorSpeed[RIGHT]);
 		p2.set_12dc_percent(MotorSpeed[BACK]);
 		p3.set_12dc_percent(MotorSpeed[LEFT]);
-		sem_wait(&motor_sem);
+		sem_wait(&motor_sem); //update with further new data
 	} while(running_g);
 
 	p0.disable();
@@ -189,16 +190,16 @@ void *monitor_imu(void *n) {
 	//printf("inital roll: %f, initial pitch: %f\n", ifr, ifp);
 
 	do {
-		usleep(IMU_SLEEP_US);
-		hrp = Imu.get_hrp();
+		usleep(IMU_SLEEP_US); //wait for next reading
+		hrp = Imu.get_hrp(); //get IMU reading and update orientation
 		pthread_mutex_lock(&hrp_mutex);
 		Orientation.fh = (float)hrp.h / 16;
-		Orientation.fr = ((float)hrp.r / 16) - ifr;
+		Orientation.fr = ((float)hrp.r / 16) - ifr; //subtract initial error
 		Orientation.fp = ((float)hrp.p / 16) - ifp;
 		Orientations[ORIENTATION_PITCH] = Orientation.fp;
 		Orientations[ORIENTATION_ROLL] = Orientation.fr;
 		pthread_mutex_unlock(&hrp_mutex);
-		sem_post(&hrp_sem);
+		sem_post(&hrp_sem); //tell stabilize thread there is new data
 		//printf("heading: %f, roll: %f, pitch: %f\n", Orientation.fh,
 							 //Orientation.fr, Orientation.fp);
 	} while (running_g);
@@ -217,16 +218,21 @@ void *monitor_input(void *n) {
 		cin >> in;
 		
 		try {
+			//check if a number was input
 			percent = stoi(in);
 		}
 		catch (invalid_argument const &e) {
+			//if no number, then check for letters
 			if (!in.compare("w")) {
+				//"w": increase speed
 				percent += MOTOR_STEP;
 				percent = min(100, percent);
 			} else if (!in.compare("s")) {
+				//"s": decrease speed
 				percent -= MOTOR_STEP;
 				percent = max(0, percent);
 			} else {
+				//quit on any other letter
 				cout << "Stopping..." << endl;
 				percent = 0;
 				running_g = 0;
@@ -254,12 +260,13 @@ int main(int c, char *argv[]) {
 
 	setup();
 
+	//create all threads
 	pthread_create(&input_thread, NULL, monitor_input, NULL);
 	pthread_create(&imu_thread, NULL, monitor_imu, NULL);
 	pthread_create(&stab_thread, NULL, stabilize, NULL);
 	pthread_create(&motor_thread, NULL, drive_motors, NULL);
 	
-	
+	//wait for threads to finish
 	pthread_join(imu_thread, NULL);
 	pthread_join(input_thread, NULL);
 	pthread_join(motor_thread, NULL);
