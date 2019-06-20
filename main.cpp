@@ -2,6 +2,7 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <semaphore.h>
+#include <signal.h>
 
 #include "Pwm.h"
 #include "BNO055_Imu.h"
@@ -15,19 +16,9 @@ using namespace std;
 
 extern PwmInstance Pwms[];
 
-sem_t input_sem;
-sem_t motor_sem;
-sem_t hrp_sem;
-pthread_mutex_t hrp_mutex;
-
 bool running_g = 1;
 int percent_g = 0;
-
-struct {
-	float fh, fr, fp;
-} Orientation;
-float Orientations[3];
-
+float Orientations[3] = { 0 };
 float MotorSpeed[4] = { 0 };
 
 struct MotorPidDebug {
@@ -48,6 +39,7 @@ positive: if this motor error (too low) is positive or not
 which_orientation : 1 for pitch, 2 for roll
 perror: previous error
 */
+#define ORIENTATION_HEADING	0
 #define ORIENTATION_PITCH	1
 #define ORIENTATION_ROLL	2
 struct MotorPidInfo {
@@ -154,23 +146,21 @@ Pitch:
 	Heading is the rotation of the drone, I won't mess with that yet.
  */
 
-void *stabilize(void *n) {
-	do {
-		sem_wait(&hrp_sem);
+void *run(void *n) {
+	volatile int percent;
+	HRP_T hrp;
+	float ifr, ifp;
 
-		MotorSpeed[FRONT] = percent_g + Pid(FRONT);
-		MotorSpeed[BACK] = percent_g + Pid(BACK);
+	BNO055_Imu Imu;
+	Imu.start();
 
-		MotorSpeed[RIGHT] = percent_g + Pid(RIGHT);
-		MotorSpeed[LEFT] = percent_g + Pid(LEFT);
+	usleep(500000); //seems like it needs some time after initial start up
 
-		sem_post(&motor_sem);
-	} while (running_g);
+	/* Calibrate for initial IMU orientation */
+	hrp = Imu.get_hrp();
+	ifr = (float)hrp.r / 16;
+	ifp = (float)hrp.p / 16;
 
-	return 0;
-}
-
-void *drive_motors(void *n) {
 	Pwm p0(Pwms[FRONT].name, Pwms[FRONT].pwm_dev);
 	Pwm p1(Pwms[RIGHT].name, Pwms[RIGHT].pwm_dev);
 	Pwm p2(Pwms[BACK].name, Pwms[BACK].pwm_dev);
@@ -193,58 +183,33 @@ void *drive_motors(void *n) {
 	p3.enable();
 
 	do {
-		//cout << "Setting PWM Percent to: " << percent_g << "%" << endl;
-		//printf("FRONT: %f, RIGHT: %f, BACK: %f, LEFT: %f\n",
-		//		MotorSpeed[FRONT], MotorSpeed[RIGHT], MotorSpeed[BACK], MotorSpeed[LEFT]);
+		usleep(IMU_SLEEP_US); //wait for next IMU reading
+		hrp = Imu.get_hrp(); //get IMU reading and update orientation
+		Orientations[ORIENTATION_PITCH] = ((float)hrp.p / 16) - ifp;
+		Orientations[ORIENTATION_ROLL] = ((float)hrp.r / 16) - ifr;
+
+		//stabilize
+		percent = percent_g;
+		MotorSpeed[FRONT] = percent + Pid(FRONT);
+		MotorSpeed[BACK] = percent + Pid(BACK);
+		MotorSpeed[RIGHT] = percent + Pid(RIGHT);
+		MotorSpeed[LEFT] = percent + Pid(LEFT);
+
+		//write motor value
 		p0.set_12dc_percent(MotorSpeed[FRONT]);
 		p1.set_12dc_percent(MotorSpeed[RIGHT]);
 		p2.set_12dc_percent(MotorSpeed[BACK]);
 		p3.set_12dc_percent(MotorSpeed[LEFT]);
+		//printf("FRONT: %f, RIGHT: %f, BACK: %f, LEFT: %f\n", MotorSpeed[FRONT],
+		//MotorSpeed[RIGHT], MotorSpeed[BACK], MotorSpeed[LEFT]);
+		//printf("e0: %f, e1: %f, e2: %f, e3: %f\n\n", DebugInfo.Motor[0].error,
+		//DebugInfo.Motor[1].error, DebugInfo.Motor[2].error, DebugInfo.Motor[3].error);
 
 		DebugInfo.Motor[FRONT].motorspeed = MotorSpeed[FRONT];
 		DebugInfo.Motor[RIGHT].motorspeed = MotorSpeed[RIGHT];
 		DebugInfo.Motor[BACK].motorspeed = MotorSpeed[BACK];
 		DebugInfo.Motor[LEFT].motorspeed = MotorSpeed[LEFT];
 		DebugInfo.setspeed = percent_g;
-
-		sem_wait(&motor_sem); //update with further new data
-	} while(running_g);
-
-	p0.disable();
-	p1.disable();
-	p2.disable();
-	p3.disable();
-
-	return 0;
-}
-
-void *monitor_imu(void *n) {
-	BNO055_Imu Imu;
-	HRP_T hrp;
-	float ifr, ifp;
-
-	Imu.start();
-	usleep(500000); //seems like it needs some time after initial start up
-
-	/* Calibrate for initial IMU orientation */
-	hrp = Imu.get_hrp();
-	ifr = (float)hrp.r / 16;
-	ifp = (float)hrp.p / 16;
-	//printf("inital roll: %f, initial pitch: %f\n", ifr, ifp);
-
-	do {
-		usleep(IMU_SLEEP_US); //wait for next reading
-		hrp = Imu.get_hrp(); //get IMU reading and update orientation
-		pthread_mutex_lock(&hrp_mutex);
-		Orientation.fh = (float)hrp.h / 16;
-		Orientation.fr = ((float)hrp.r / 16) - ifr; //subtract initial error
-		Orientation.fp = ((float)hrp.p / 16) - ifp;
-		Orientations[ORIENTATION_PITCH] = Orientation.fp;
-		Orientations[ORIENTATION_ROLL] = Orientation.fr;
-		pthread_mutex_unlock(&hrp_mutex);
-		sem_post(&hrp_sem); //tell stabilize thread there is new data
-		//printf("heading: %f, roll: %f, pitch: %f\n", Orientation.fh,
-							 //Orientation.fr, Orientation.fp);
 	} while (running_g);
 
 	return 0;
@@ -290,44 +255,33 @@ void *monitor_input(void *n) {
 
 	} while(running_g);
 
-	sem_post(&motor_sem); //post to motor to get it to shut off
-
 	return 0;
 }
 
-void setup();
-void destroy();
+void ctrlc_handler(int s);
 int main(int c, char *argv[]) {
-	pthread_t imu_thread;
+	struct sigaction sigIntHandler;
 	pthread_t input_thread;
-	pthread_t motor_thread;
-	pthread_t stab_thread;
+	pthread_t run_thread;
 
-	setup();
+	sigIntHandler.sa_handler = ctrlc_handler;
+	sigemptyset(&sigIntHandler.sa_mask);
+	sigIntHandler.sa_flags = 0;
+	sigaction(SIGINT, &sigIntHandler, NULL);
 
 	//create all threads
 	pthread_create(&input_thread, NULL, monitor_input, NULL);
-	pthread_create(&imu_thread, NULL, monitor_imu, NULL);
-	pthread_create(&stab_thread, NULL, stabilize, NULL);
-	pthread_create(&motor_thread, NULL, drive_motors, NULL);
+	pthread_create(&run_thread, NULL, run, NULL);
 	
 	//wait for threads to finish
-	pthread_join(imu_thread, NULL);
+	pthread_join(run_thread, NULL);
 	pthread_join(input_thread, NULL);
-	pthread_join(motor_thread, NULL);
-	pthread_join(stab_thread, NULL);
 
-	destroy();
 	cout << "Exiting..." << endl;
 }
 
-void setup() {
-	sem_init(&input_sem, 0, 0);
-	sem_init(&motor_sem, 0, 0);
-	sem_init(&hrp_sem, 0, 0);
-	pthread_mutex_init(&hrp_mutex, NULL);
-}
-
-void destroy() {
-	pthread_mutex_destroy(&hrp_mutex);
+void ctrlc_handler(int s) {
+	running_g = 0;
+	usleep(11000);
+	exit(0);
 }
