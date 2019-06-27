@@ -68,11 +68,11 @@ void Pwm::set_duty_cycle(int percent) {
 }
 
 /* This fucntion sets the duty cycle to be between 1-2ms */
-void Pwm::set_12dc_percent(float percent) {
+void Pwm::set_12dc_percent(int percent) {
 	int dc;
-	if (percent >= 0.0 && percent <= 100.0) {
+	if (percent >= 0 && percent <= 100) {
 		dc = 1000000; //1 milisecond minimum;
-		dc += (int)((percent/100)*1000000);
+		dc += percent*10000;
 		this->fduty_cycle << to_string(dc) << endl;
 	}
 }

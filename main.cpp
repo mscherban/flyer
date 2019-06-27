@@ -18,18 +18,19 @@ extern PwmInstance Pwms[];
 
 bool running_g = 1;
 int percent_g = 0;
-float Orientations[3] = { 0 };
-float MotorSpeed[4] = { 0 };
+short Orientations[3] = { 0 };
+short MotorSpeed[4] = { 0 };
 
 struct MotorPidDebug {
-	float pterm, iterm, dterm;
-	float pid;
-	float error;
-	float motorspeed;
+	short pterm, iterm, dterm;
+	short pid;
+	short error;
+	short motorspeed;
 };
 
 struct {
-	float setspeed;
+	short setspeed;
+	short imu_h, imu_r, imu_p;
 	struct MotorPidDebug Motor[4];
 } DebugInfo;
 
@@ -43,10 +44,10 @@ perror: previous error
 #define ORIENTATION_PITCH	1
 #define ORIENTATION_ROLL	2
 struct MotorPidInfo {
-	float iterm;
+	short iterm;
 	int positive;
 	int which_orientation;
-	float perror;
+	short perror;
 };
 
 struct MotorPidInfo MotorPidInfos[4] {
@@ -77,13 +78,13 @@ struct MotorPidInfo MotorPidInfos[4] {
 };
 
 #define MAX_SPEED_PID_BOOST	5
-#define KP	0.5
+#define KP	0.1
 #define KI	0.0
-#define KD 	0.3
+#define KD 	0.0
 
-float Pid(int m) {
-	float error;
-	float pterm, iterm, dterm, pid;
+int Pid(int m) {
+	int error;
+	int pterm, iterm, dterm, pid;
 	
 	//get the pitch or roll error
 	error = Orientations[MotorPidInfos[m].which_orientation];
@@ -125,11 +126,13 @@ float Pid(int m) {
 	//}
 
 	//restrict the pid to a maximum of 10% above setspeed
-	pid = (float)min(MAX_SPEED_PID_BOOST, (int)pid);
+	pid = min(MAX_SPEED_PID_BOOST, pid);
+	pid = max(0, pid);
 
 	return pid;
 }
 
+void PrintDebugInfo();
 /*
 	--- STABILITY ---
 Pitch:
@@ -149,7 +152,7 @@ Pitch:
 void *run(void *n) {
 	volatile int percent;
 	HRP_T hrp;
-	float ifr, ifp;
+	short ifh, ifr, ifp;
 
 	BNO055_Imu Imu;
 	Imu.start();
@@ -158,8 +161,9 @@ void *run(void *n) {
 
 	/* Calibrate for initial IMU orientation */
 	hrp = Imu.get_hrp();
-	ifr = (float)hrp.r / 16;
-	ifp = (float)hrp.p / 16;
+	ifh = hrp.h;
+	ifr = hrp.r;
+	ifp = hrp.p;
 
 	Pwm p0(Pwms[FRONT].name, Pwms[FRONT].pwm_dev);
 	Pwm p1(Pwms[RIGHT].name, Pwms[RIGHT].pwm_dev);
@@ -185,8 +189,13 @@ void *run(void *n) {
 	do {
 		usleep(IMU_SLEEP_US); //wait for next IMU reading
 		hrp = Imu.get_hrp(); //get IMU reading and update orientation
-		Orientations[ORIENTATION_PITCH] = ((float)hrp.p / 16) - ifp;
-		Orientations[ORIENTATION_ROLL] = ((float)hrp.r / 16) - ifr;
+		Orientations[ORIENTATION_HEADING] = hrp.h - ifh;
+		Orientations[ORIENTATION_ROLL] = hrp.r - ifr;
+		Orientations[ORIENTATION_PITCH] = hrp.p - ifp;
+
+		DebugInfo.imu_h = Orientations[ORIENTATION_HEADING];
+		DebugInfo.imu_r = Orientations[ORIENTATION_ROLL];
+		DebugInfo.imu_p = Orientations[ORIENTATION_PITCH];
 
 		//stabilize
 		percent = percent_g;
@@ -200,16 +209,14 @@ void *run(void *n) {
 		p1.set_12dc_percent(MotorSpeed[RIGHT]);
 		p2.set_12dc_percent(MotorSpeed[BACK]);
 		p3.set_12dc_percent(MotorSpeed[LEFT]);
-		//printf("FRONT: %f, RIGHT: %f, BACK: %f, LEFT: %f\n", MotorSpeed[FRONT],
-		//MotorSpeed[RIGHT], MotorSpeed[BACK], MotorSpeed[LEFT]);
-		//printf("e0: %f, e1: %f, e2: %f, e3: %f\n\n", DebugInfo.Motor[0].error,
-		//DebugInfo.Motor[1].error, DebugInfo.Motor[2].error, DebugInfo.Motor[3].error);
 
 		DebugInfo.Motor[FRONT].motorspeed = MotorSpeed[FRONT];
 		DebugInfo.Motor[RIGHT].motorspeed = MotorSpeed[RIGHT];
 		DebugInfo.Motor[BACK].motorspeed = MotorSpeed[BACK];
 		DebugInfo.Motor[LEFT].motorspeed = MotorSpeed[LEFT];
 		DebugInfo.setspeed = percent_g;
+
+		PrintDebugInfo();
 	} while (running_g);
 
 	return 0;
@@ -280,8 +287,31 @@ int main(int c, char *argv[]) {
 	cout << "Exiting..." << endl;
 }
 
+void PrintDebugInfo() {
+	static int cnt = 100;
+
+	if (--cnt == 0) {
+		cnt = 100;
+		printf("------\n");
+		//printf("FRONT: %f, RIGHT: %f, BACK: %f, LEFT: %f\n", MotorSpeed[FRONT],
+		//MotorSpeed[RIGHT], MotorSpeed[BACK], MotorSpeed[LEFT]);
+		printf("ERROR:\n"
+			   "  FRONT: %04hi, RIGHT: %04hi, BACK: %04hi, LEFT: %04hi\n", DebugInfo.Motor[0].error,
+		DebugInfo.Motor[1].error, DebugInfo.Motor[2].error, DebugInfo.Motor[3].error);
+
+		printf("PID:\n"
+			   "  FRONT: %04hi, RIGHT: %04hi, BACK: %04hi, LEFT: %04hi\n", DebugInfo.Motor[0].pid,
+		DebugInfo.Motor[1].pid, DebugInfo.Motor[2].pid, DebugInfo.Motor[3].pid);
+
+		printf("MOTORSPEED:\n"
+			   "  FRONT: %04hi, RIGHT: %04hi, BACK: %04hi, LEFT: %04hi\n", DebugInfo.Motor[0].motorspeed,
+		DebugInfo.Motor[1].motorspeed, DebugInfo.Motor[2].motorspeed, DebugInfo.Motor[3].motorspeed);
+		//printf("h: %hi, r: %hi, p: %hi\n", DebugInfo.imu_h, DebugInfo.imu_r, DebugInfo.imu_p);
+	}
+}
+
 void ctrlc_handler(int s) {
 	running_g = 0;
-	usleep(11000);
+	usleep(20000);
 	exit(0);
 }
