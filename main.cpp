@@ -14,6 +14,11 @@ using namespace std;
 
 #define MOTOR_STEP		3
 
+#define DEBUG_FILENAME	"debug.csv"
+fstream fdebug;
+
+void print_2_csv();
+
 extern PwmInstance Pwms[];
 
 bool running_g = 1;
@@ -216,7 +221,9 @@ void *run(void *n) {
 		DebugInfo.Motor[LEFT].motorspeed = MotorSpeed[LEFT];
 		DebugInfo.setspeed = percent_g;
 
-		PrintDebugInfo();
+		//PrintDebugInfo();
+		if (percent > 5)
+			print_2_csv();
 	} while (running_g);
 
 	return 0;
@@ -265,11 +272,14 @@ void *monitor_input(void *n) {
 	return 0;
 }
 
+void setup();
 void ctrlc_handler(int s);
 int main(int c, char *argv[]) {
 	struct sigaction sigIntHandler;
 	pthread_t input_thread;
 	pthread_t run_thread;
+
+	setup();
 
 	sigIntHandler.sa_handler = ctrlc_handler;
 	sigemptyset(&sigIntHandler.sa_mask);
@@ -314,4 +324,66 @@ void ctrlc_handler(int s) {
 	running_g = 0;
 	usleep(20000);
 	exit(0);
+}
+
+/* struct MotorPidDebug {
+	short pterm, iterm, dterm;
+	short pid;
+	short error;
+	short motorspeed;
+};
+
+struct {
+	short setspeed;
+	short imu_h, imu_r, imu_p;
+	struct MotorPidDebug Motor[4];
+} DebugInfo; */
+
+void setup() {
+	fdebug.open(DEBUG_FILENAME, ios::out);
+	fdebug << "cnt,setspeed,heading,roll,pitch,"
+			"front_p,front_i,front_d,front_pid,front_err,front_speed,"
+			"right_p,right_i,right_d,right_pid,right_err,right_speed,"
+			"back_p,back_i,back_d,back_pid,back_err,back_speed,"
+			"left_p,left_i,left_d,left_pid,left_err,left_speed,\n";
+}
+
+void print_2_csv() {
+	static int cnt = 0;
+
+	fdebug << cnt++ << ",";
+	fdebug << DebugInfo.setspeed << ",";
+	fdebug << DebugInfo.imu_h << ",";
+	fdebug << DebugInfo.imu_r << ",";
+	fdebug << DebugInfo.imu_p << ",";
+
+	fdebug << DebugInfo.Motor[FRONT].pterm << ",";
+	fdebug << DebugInfo.Motor[FRONT].iterm << ",";
+	fdebug << DebugInfo.Motor[FRONT].dterm << ",";
+	fdebug << DebugInfo.Motor[FRONT].pid << ",";
+	fdebug << DebugInfo.Motor[FRONT].error << ",";
+	fdebug << DebugInfo.Motor[FRONT].motorspeed << ",";
+
+	fdebug << DebugInfo.Motor[RIGHT].pterm << ",";
+	fdebug << DebugInfo.Motor[RIGHT].iterm << ",";
+	fdebug << DebugInfo.Motor[RIGHT].dterm << ",";
+	fdebug << DebugInfo.Motor[RIGHT].pid << ",";
+	fdebug << DebugInfo.Motor[RIGHT].error << ",";
+	fdebug << DebugInfo.Motor[RIGHT].motorspeed << ",";
+
+	fdebug << DebugInfo.Motor[BACK].pterm << ",";
+	fdebug << DebugInfo.Motor[BACK].iterm << ",";
+	fdebug << DebugInfo.Motor[BACK].dterm << ",";
+	fdebug << DebugInfo.Motor[BACK].pid << ",";
+	fdebug << DebugInfo.Motor[BACK].error << ",";
+	fdebug << DebugInfo.Motor[BACK].motorspeed << ",";
+
+	fdebug << DebugInfo.Motor[LEFT].pterm << ",";
+	fdebug << DebugInfo.Motor[LEFT].iterm << ",";
+	fdebug << DebugInfo.Motor[LEFT].dterm << ",";
+	fdebug << DebugInfo.Motor[LEFT].pid << ",";
+	fdebug << DebugInfo.Motor[LEFT].error << ",";
+	fdebug << DebugInfo.Motor[LEFT].motorspeed << ",";
+
+	fdebug << endl;
 }
