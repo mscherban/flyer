@@ -3,16 +3,17 @@
 #include <pthread.h>
 #include <semaphore.h>
 #include <signal.h>
+#include <math.h>
 
 #include "Pwm.h"
 #include "BNO055_Imu.h"
 
 using namespace std;
 
-#define IMU_SLEEP_US	((1.0 / IMU_POLLING_RATE_HZ) * 1000000)
+#define IMU_SLEEP_US	(((1.0 / IMU_POLLING_RATE_HZ) * 1000000) / 2)
 #define MOTOR_PWM_FREQ	2100000
 
-#define MOTOR_STEP		5
+#define MOTOR_STEP		3
 
 #define DEBUG_FILENAME	"debug.csv"
 fstream fdebug;
@@ -45,9 +46,9 @@ positive: if this motor error (too low) is positive or not
 which_orientation : 1 for pitch, 2 for roll
 perror: previous error
 */
-#define ORIENTATION_HEADING	0
-#define ORIENTATION_PITCH	1
-#define ORIENTATION_ROLL	2
+#define HEADING	0
+#define PITCH	1
+#define ROLL	2
 struct MotorPidInfo {
 	short iterm;
 	int positive;
@@ -59,33 +60,37 @@ struct MotorPidInfo MotorPidInfos[4] {
 	[FRONT] = {
 		.iterm = 0,
 		.positive = 1,
-		.which_orientation = ORIENTATION_PITCH,
+		.which_orientation = PITCH,
 		.perror = 0,
 	},
 	[RIGHT] = {
 		.iterm = 0,
 		.positive = 0,
-		.which_orientation = ORIENTATION_ROLL,
+		.which_orientation = ROLL,
 		.perror = 0,
 	},
 	[BACK] = {
 		.iterm = 0,
 		.positive = 0,
-		.which_orientation = ORIENTATION_PITCH,
+		.which_orientation = PITCH,
 		.perror = 0,
 	},
 	[LEFT] = {
 		.iterm = 0,
 		.positive = 1,
-		.which_orientation = ORIENTATION_ROLL,
+		.which_orientation = ROLL,
 		.perror = 0,
 	}
 };
 
-#define MAX_SPEED_PID_BOOST	5
+float alpha_filter(float new_val, float old_val, float coef) {
+	return (new_val*coef + old_val*(1-coef));
+}
+
+#define MAX_SPEED_PID_BOOST	8
 #define KP	0.1
-#define KI	0.0
-#define KD 	0.0
+#define KI	0.02
+#define KD 	1.0
 
 int Pid(int m) {
 	int error;
@@ -153,8 +158,8 @@ Pitch:
 
 	Heading is the rotation of the drone, I won't mess with that yet.
  */
-
 void *run(void *n) {
+	volatile float percent_old = 0;
 	volatile int percent;
 	HRP_T hrp;
 	short ifh, ifr, ifp;
@@ -194,16 +199,19 @@ void *run(void *n) {
 	do {
 		usleep(IMU_SLEEP_US); //wait for next IMU reading
 		hrp = Imu.get_hrp(); //get IMU reading and update orientation
-		Orientations[ORIENTATION_HEADING] = hrp.h - ifh;
-		Orientations[ORIENTATION_ROLL] = hrp.r - ifr;
-		Orientations[ORIENTATION_PITCH] = hrp.p - ifp;
+		//alpha filter the error so it does not change so drastically
+		Orientations[HEADING] = (short)alpha_filter(hrp.h - ifh, Orientations[HEADING], .90);
+		Orientations[ROLL] = (short)alpha_filter(hrp.r - ifr, Orientations[ROLL], .90);
+		Orientations[PITCH] = (short)alpha_filter(hrp.p - ifp, Orientations[PITCH], .90);
 
-		DebugInfo.imu_h = Orientations[ORIENTATION_HEADING];
-		DebugInfo.imu_r = Orientations[ORIENTATION_ROLL];
-		DebugInfo.imu_p = Orientations[ORIENTATION_PITCH];
+		DebugInfo.imu_h = Orientations[HEADING];
+		DebugInfo.imu_r = Orientations[ROLL];
+		DebugInfo.imu_p = Orientations[PITCH];
 
-		//stabilize
-		percent = percent_g;
+		/* average input speed, so there are no sudden speed changes */
+		percent_old = alpha_filter(percent_g, percent_old, .05);
+		percent = (int)percent_old;
+
 		MotorSpeed[FRONT] = percent + Pid(FRONT);
 		MotorSpeed[BACK] = percent + Pid(BACK);
 		MotorSpeed[RIGHT] = percent + Pid(RIGHT);
@@ -222,7 +230,7 @@ void *run(void *n) {
 		DebugInfo.setspeed = percent_g;
 
 		//PrintDebugInfo();
-		if (percent > 5)
+		if (percent > 40)
 			print_2_csv();
 	} while (running_g);
 
