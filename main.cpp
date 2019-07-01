@@ -12,7 +12,7 @@ using namespace std;
 #define IMU_SLEEP_US	((1.0 / IMU_POLLING_RATE_HZ) * 1000000)
 #define MOTOR_PWM_FREQ	2100000
 
-#define MOTOR_STEP		3
+#define MOTOR_STEP		5
 
 #define DEBUG_FILENAME	"debug.csv"
 fstream fdebug;
@@ -114,7 +114,7 @@ int Pid(int m) {
 	dterm = error - MotorPidInfos[m].perror;
 
 	//sum and multiply by coefficients for the control value
-	pid = (pterm * KP) + (iterm * KI) - (dterm * KD);
+	pid = (pterm * KP) + (iterm * KI) + (dterm * KD);
 
  	DebugInfo.Motor[m].pterm = pterm;
 	DebugInfo.Motor[m].iterm = iterm;
